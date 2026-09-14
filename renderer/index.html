@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Latens 控制中心</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">L</div>
+        <div><strong>Latens</strong><span>远控控制中心</span></div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-page="home"><span>⌂</span>首页</button>
+        <button class="nav-item" data-page="network"><span>◎</span>网络</button>
+        <button class="nav-item" data-page="service"><span>◉</span>服务</button>
+        <button class="nav-item" data-page="settings"><span>⚙</span>设置</button>
+        <button class="nav-item" data-page="diagnostics"><span>◇</span>诊断</button>
+        <button class="nav-item" data-page="logs"><span>≡</span>日志</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="mini-status"><span id="sideDot" class="dot"></span><span id="sideStatus">正在检测</span></div>
+        <div id="appVersion" class="version">Latens</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">首页</h1>
+          <p id="pageSubtitle">远控运行状态与快速操作</p>
+        </div>
+        <div class="top-actions">
+          <span id="globalStatus" class="status-pill neutral">正在检测</span>
+          <button id="refreshBtn" class="icon-btn" title="刷新">↻</button>
+        </div>
+      </header>
+
+      <section id="notInstalledBanner" class="banner warning hidden">
+        <div><strong>未检测到后台运行组件</strong><p>当前 v3.1 beta 控制中心会接管已安装的 alpha5.1 运行时。请先用 alpha5.1 完整包完成一次安装。</p></div>
+      </section>
+
+      <section class="page active" data-page="home">
+        <div class="hero-grid">
+          <article class="card service-card">
+            <div class="card-head"><span>远控服务</span><span id="serviceBadge" class="badge neutral">检测中</span></div>
+            <div class="service-main"><span id="serviceDot" class="big-dot"></span><div><strong id="serviceText">正在读取状态</strong><p id="serviceDetail">Guardian / Bridge / Gateway</p></div></div>
+            <div class="button-row">
+              <button id="startBtn" class="btn primary">启动服务</button>
+              <button id="stopBtn" class="btn">停止服务</button>
+              <button id="restartBtn" class="btn">重启服务</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head"><span>雷电模拟器</span><span id="ldBadge" class="badge neutral">检测中</span></div>
+            <div class="metric-large" id="ldTitle">实例 0</div>
+            <p id="ldDetail" class="muted">正在检测主实例</p>
+          </article>
+
+          <article class="card">
+            <div class="card-head"><span>访问密码</span><span class="badge">6–64 位</span></div>
+            <div class="password-row"><code id="passwordPreview">••••••••••••</code><button id="togglePasswordBtn" class="text-btn">显示</button></div>
+            <p class="muted">原 6 位数字 PIN 继续兼容</p>
+            <button class="btn compact" data-go="settings">修改密码</button>
+          </article>
+        </div>
+
+        <article class="card section-card">
+          <div class="section-title"><div><h2>可用访问地址</h2><p>自动识别 Tailscale、蒲公英 / VPN 与局域网</p></div><span id="addressCount" class="badge">0 个</span></div>
+          <div id="homeAddresses" class="address-list empty">暂未发现可用私网地址</div>
+        </article>
+
+        <div class="stats-grid">
+          <article class="stat-card"><span>Guardian</span><strong id="guardianState">--</strong></article>
+          <article class="stat-card"><span>Bridge</span><strong id="bridgeState">--</strong></article>
+          <article class="stat-card"><span>Gateway</span><strong id="gatewayState">--</strong></article>
+          <article class="stat-card"><span>登录自启</span><strong id="autoStartState">--</strong></article>
+        </div>
+      </section>
+
+      <section class="page" data-page="network">
+        <article class="card section-card">
+          <div class="section-title"><div><h2>网络入口</h2><p>只显示本机当前有效的私有网络地址</p></div><button id="networkRefreshBtn" class="btn compact">重新检测</button></div>
+          <div id="networkAddresses" class="network-table"></div>
+        </article>
+        <article class="card info-card">
+          <h3>访问说明</h3>
+          <p>Tailscale 通常使用 <code>100.x.x.x</code>；蒲公英使用其虚拟网卡地址；普通局域网使用运行 Latens 的 Windows 电脑自己的 <code>192.168.x.x</code> 等地址。</p>
+          <p><code>192.168.1.1</code> 在很多网络中是路由器地址，不应默认当成电脑地址。</p>
+        </article>
+      </section>
+
+      <section class="page" data-page="service">
+        <div class="two-col">
+          <article class="card section-card">
+            <div class="section-title"><div><h2>后台服务</h2><p>关闭窗口不会停止服务，Latens 会缩到系统托盘</p></div></div>
+            <div class="service-control-stack">
+              <button id="serviceStartBtn" class="action-tile"><span>▶</span><div><strong>启动服务</strong><small>启动 Guardian、Bridge 和网络 Gateway</small></div></button>
+              <button id="serviceRestartBtn" class="action-tile"><span>↻</span><div><strong>重启服务</strong><small>用于修改配置后重新载入</small></div></button>
+              <button id="serviceStopBtn" class="action-tile danger"><span>■</span><div><strong>停止服务</strong><small>写入停止标记并结束当前后台进程</small></div></button>
+            </div>
+          </article>
+          <article class="card section-card">
+            <div class="section-title"><div><h2>组件状态</h2><p>运行时进程监控</p></div></div>
+            <div class="component-list">
+              <div><span>Guardian 守护</span><strong id="serviceGuardian">--</strong></div>
+              <div><span>scrcpy Bridge</span><strong id="serviceBridge">--</strong></div>
+              <div><span>WebRTC Gateway</span><strong id="serviceGateway">--</strong></div>
+              <div><span>雷电主实例</span><strong id="serviceLd">--</strong></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="page" data-page="settings">
+        <div class="two-col settings-layout">
+          <article class="card section-card">
+            <div class="section-title"><div><h2>访问密码</h2><p>修改后会自动重启远控服务</p></div></div>
+            <label class="field"><span>新密码</span><input id="newPassword" type="password" maxlength="64" autocomplete="new-password" placeholder="6–64 位"></label>
+            <label class="field"><span>确认密码</span><input id="confirmPassword" type="password" maxlength="64" autocomplete="new-password" placeholder="再次输入"></label>
+            <p class="hint">允许英文字母、数字及 <code>. _ ~ ! @ # % + = -</code></p>
+            <button id="savePasswordBtn" class="btn primary">保存新密码</button>
+          </article>
+
+          <article class="card section-card">
+            <div class="section-title"><div><h2>登录自启</h2><p>启动 Latens 控制中心，并在后台拉起远控服务</p></div></div>
+            <label class="switch-row"><div><strong>Windows 登录后自动启动</strong><small>以托盘模式启动，不弹主窗口</small></div><input id="autoStartToggle" type="checkbox"><span class="switch"></span></label>
+          </article>
+        </div>
+
+        <article class="card section-card">
+          <div class="section-title"><div><h2>视频与实例参数</h2><p>保存后自动重启后台服务；不会修改 WebRTC / scrcpy 协议逻辑</p></div></div>
+          <div class="form-grid">
+            <label class="field"><span>雷电实例编号</span><input id="instanceIndex" type="number" min="0" max="99"></label>
+            <label class="field"><span>最大分辨率</span><input id="maxSize" type="number" min="480" max="4096"></label>
+            <label class="field"><span>最大帧率</span><input id="maxFps" type="number" min="15" max="120"></label>
+            <label class="field"><span>视频码率（bps）</span><input id="videoBitRate" type="number" min="500000" max="30000000"></label>
+            <label class="field readonly"><span>公共端口</span><input id="publicPort" type="number" disabled><small>当前版本只显示，不在 UI 中修改防火墙端口</small></label>
+          </div>
+          <button id="saveRuntimeSettingsBtn" class="btn primary">保存运行参数</button>
+        </article>
+      </section>
+
+      <section class="page" data-page="diagnostics">
+        <article class="card section-card">
+          <div class="section-title"><div><h2>一键诊断</h2><p>检查后台组件、雷电状态和每个网络入口的健康接口</p></div><button id="diagnoseBtn" class="btn primary compact">开始诊断</button></div>
+          <div id="diagnosticSummary" class="diagnostic-summary muted">尚未执行诊断。</div>
+          <div id="diagnosticChecks" class="diagnostic-checks"></div>
+        </article>
+      </section>
+
+      <section class="page" data-page="logs">
+        <article class="card log-card">
+          <div class="section-title"><div><h2>运行日志</h2><p>UTF-8 显示，不再通过 BAT/TXT 文件名操作</p></div><button id="logsRefreshBtn" class="btn compact">刷新</button></div>
+          <div class="log-tabs"><button class="active" data-log="runtime">运行日志</button><button data-log="setup">安装日志</button></div>
+          <pre id="logViewer">正在读取日志…</pre>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

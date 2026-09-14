@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.1.0-beta.1 - Electron desktop control center
+
+- Added a pure-Chinese Electron control center with pages for home, network, service, settings, diagnostics, and logs.
+- Added Windows tray behavior; closing the window hides Latens instead of stopping the remote service.
+- Added UI controls for service start/stop/restart, access-password changes, runtime parameters, address copy/open, and health diagnostics.
+- Added automatic display of Tailscale, 蒲公英/VPN, and RFC1918 LAN addresses from the Windows host.
+- Added Windows login auto-start for the Electron app and synchronization with the legacy alpha5.1 scheduled task.
+- Added UTF-8 runtime/setup log viewing in the UI.
+- Added an Electron syntax gate and Windows NSIS build workflow.
+- Beta1 deliberately manages the already-installed alpha5.1 runtime and does not change WebRTC, scrcpy, H.264, DataChannel, Bridge, or the prebuilt Gateway binary.
+
 ## v3.0.0-alpha5.1 - packaging cleanup only
 
 - Removed legacy 01-05 launcher BAT files from the release ZIP to avoid duplicate entry points and Chinese filename encoding issues on Windows extractors.

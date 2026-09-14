@@ -1,6 +1,12 @@
 # Prebuilt binary is distributed in the runnable ZIP/release package.
 webrtc-gateway.exe
 
+# Node / Electron
+node_modules/
+dist/
+release/
+*.blockmap
+
 # Runtime/generated files
 诊断日志.txt
 iPhone连接信息.txt
