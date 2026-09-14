@@ -15,7 +15,7 @@ Windows 上的雷电模拟器浏览器低延迟远控工具。视频链路使用
 
 ## 安装
 
-以管理员身份运行原有的一键安装 BAT。首次安装会提示设置 6–64 位访问密码；直接留空则自动生成旧版兼容的 6 位数字 PIN。
+以管理员身份运行 `install-and-start.bat`。首次安装会提示设置 6–64 位访问密码；直接留空则自动生成旧版兼容的 6 位数字 PIN。
 
 安装完成后会生成 `iPhone连接信息.txt`，列出当前所有可用地址，例如：
 
@@ -31,7 +31,7 @@ http://192.168.1.x:17920/    # 普通局域网
 
 - `start-service.bat`：静默启动后台守护。
 - `stop-service.bat`：停止 Guardian、Bridge 与所有网关实例；不会卸载自动启动任务。
-- 原有重启 BAT：停止后重新启动后台守护。
+- `restart-service.bat`：停止后重新启动后台守护。
 - Windows 下次登录时，计划任务会再次自动启动服务。
 
 ## 自定义密码
@@ -56,6 +56,14 @@ C:\ProgramData\LDPlayer-Browser-Remote-v3\config.ini
 
 Guardian 会忽略 WSL、Hyper-V、VMware、VirtualBox、Docker 等常见无关虚拟网卡，同时允许 Tailscale、VPN/蒲公英以及物理私网接口。网络变化后会在轮询周期内自动增减对应网关实例。
 
+## 预编译网关
+
+仓库不提交 `webrtc-gateway.exe`，只保留其 SHA-256。完整可运行 ZIP 包含从用户提供的 alpha4 基线继承的原始网关 EXE。Go 网关源码不在该基线中，因此 alpha5 的多网络能力由 Guardian 的多实例方式实现。
+
 ## 安全边界
 
 此版本面向可信的 Tailscale、蒲公英 VPN 和受控局域网环境，不应直接做公网端口映射。防火墙规则限制的是来源地址范围，并不能替代 VPN ACL、Wi-Fi 隔离、路由器访问控制等网络安全策略。
+
+## 验证状态
+
+已完成前端 JavaScript 静态语法检查和配置/脚本一致性检查。目标 Windows 主机上的 PowerShell 5.1、Bridge `Add-Type` 编译，以及 Tailscale / 蒲公英 / LAN 三条真实链路仍需实机验证；详见 `QUALITY_GATE.md`。
