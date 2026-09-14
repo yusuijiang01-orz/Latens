@@ -2,11 +2,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const http = require('http');
-const { spawn, execFile } = require('child_process');
+const { execFile } = require('child_process');
 const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 const PASSWORD_RE = /^[A-Za-z0-9._~!@#%+=-]{6,64}$/;
+const TASK_NAME = 'LDPlayer-Browser-Remote-v3-AutoStart';
+
+function psQuote(value) {
+  return String(value).replace(/'/g, "''");
+}
 
 class RuntimeService {
   constructor(app) {
@@ -34,25 +39,6 @@ class RuntimeService {
       result[line.slice(0, i).trim()] = line.slice(i + 1).trim();
     }
     return result;
-  }
-
-  updateConfig(updates) {
-    if (!this.exists(this.configPath)) throw new Error('尚未安装 Latens 后台运行组件。');
-    const original = fs.readFileSync(this.configPath, 'utf8').replace(/^\uFEFF/, '');
-    const pending = new Map(Object.entries(updates).map(([k, v]) => [k, String(v)]));
-    const lines = original.split(/\r?\n/).map((raw) => {
-      const i = raw.indexOf('=');
-      if (i <= 0) return raw;
-      const key = raw.slice(0, i).trim();
-      if (!pending.has(key)) return raw;
-      const value = pending.get(key);
-      pending.delete(key);
-      return `${key}=${value}`;
-    });
-    for (const [key, value] of pending) lines.push(`${key}=${value}`);
-    const tmp = `${this.configPath}.tmp`;
-    fs.writeFileSync(tmp, lines.join('\r\n'), 'utf8');
-    fs.renameSync(tmp, this.configPath);
   }
 
   getPassword() {
@@ -169,6 +155,17 @@ class RuntimeService {
     } catch (_) { return { detected: true, running: false, index }; }
   }
 
+  async getLegacyTaskAutoStart() {
+    try {
+      const { stdout } = await execFileAsync('schtasks.exe', ['/Query', '/TN', TASK_NAME, '/XML'], { windowsHide: true, timeout: 5000, maxBuffer: 1024 * 1024 });
+      const text = String(stdout || '');
+      const match = text.match(/<Enabled>\s*(true|false)\s*<\/Enabled>/i);
+      return { present: true, enabled: match ? match[1].toLowerCase() === 'true' : true };
+    } catch (_) {
+      return { present: false, enabled: false };
+    }
+  }
+
   async getSnapshot() {
     const config = this.readConfig();
     const installed = this.exists(this.configPath) && this.exists(path.join(this.stateDir, 'Guardian.ps1'));
@@ -178,7 +175,8 @@ class RuntimeService {
     const aliveGateways = gateways.filter((g) => g.alive).length;
     const publicPort = Number(config.PublicPort || 0);
     const addresses = this.getAddresses(publicPort);
-    const ldplayer = await this.getLdPlayerStatus(config);
+    const [ldplayer, legacyTask] = await Promise.all([this.getLdPlayerStatus(config), this.getLegacyTaskAutoStart()]);
+    const appAutoStart = this.app.getLoginItemSettings().openAtLogin;
     let serviceState = 'stopped';
     if (guardian.alive && bridge.alive && aliveGateways > 0) serviceState = 'running';
     else if (guardian.alive || bridge.alive || aliveGateways > 0) serviceState = 'degraded';
@@ -201,58 +199,69 @@ class RuntimeService {
         videoBitRate: Number(config.VideoBitRate || 3000000),
         instanceIndex: Number(config.InstanceIndex || 0)
       },
-      autoStart: this.app.getLoginItemSettings().openAtLogin,
+      autoStart: appAutoStart || legacyTask.enabled,
+      appAutoStart,
+      legacyTask,
       hasPassword: Boolean(config.AccessPassword || config.Pin)
     };
   }
 
-  spawnHiddenPowerShell(script) {
-    const child = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script], {
-      detached: true,
-      windowsHide: true,
-      stdio: 'ignore'
-    });
-    child.unref();
+  async runElevatedScript(scriptText, timeout = 60000) {
+    const temp = path.join(os.tmpdir(), `latens-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.ps1`);
+    fs.writeFileSync(temp, `\uFEFF${scriptText}`, 'utf8');
+    const argLine = `-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "${temp.replace(/"/g, '""')}"`;
+    const launcher = `$p=Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '${psQuote(argLine)}'; exit $p.ExitCode`;
+    try {
+      await execFileAsync('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', launcher], { windowsHide: true, timeout });
+    } catch (error) {
+      throw new Error(`管理员操作失败或已取消：${error.message || error}`);
+    } finally {
+      try { fs.rmSync(temp, { force: true }); } catch (_) {}
+    }
+  }
+
+  lifecycleScript(action) {
+    const state = psQuote(this.stateDir);
+    const task = psQuote(TASK_NAME);
+    const common = `$ErrorActionPreference='Stop'\n$state='${state}'\n$task='${task}'\n$stop=Join-Path $state 'stop.signal'\nfunction Stop-Latens {\n  New-Item -ItemType File -Path $stop -Force | Out-Null\n  try { Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue } catch {}\n  Start-Sleep -Milliseconds 500\n  $files=@((Join-Path $state 'guardian.pid'),(Join-Path $state 'bridge.pid'),(Join-Path $state 'gateway.pid'))\n  $files += @(Get-ChildItem -LiteralPath $state -Filter 'gateway-*.pid' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })\n  foreach($f in $files){ if(Test-Path -LiteralPath $f){ try { Stop-Process -Id ([int](Get-Content -LiteralPath $f -Raw)) -Force -ErrorAction SilentlyContinue } catch {}; Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }\n}\nfunction Start-Latens {\n  Remove-Item -LiteralPath $stop -Force -ErrorAction SilentlyContinue\n  $guardian=Join-Path $state 'Guardian.ps1'\n  if(-not(Test-Path -LiteralPath $guardian)){ exit 2 }\n  $alive=$false\n  $pidFile=Join-Path $state 'guardian.pid'\n  if(Test-Path -LiteralPath $pidFile){ try { $gp=[int](Get-Content -LiteralPath $pidFile -Raw); if(Get-Process -Id $gp -ErrorAction SilentlyContinue){$alive=$true} } catch {} }\n  if(-not $alive){ try { Start-ScheduledTask -TaskName $task -ErrorAction Stop } catch { $a='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "'+$guardian+'"'; Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $a } }\n}\n`;
+    if (action === 'start') return `${common}\nStart-Latens\n`;
+    if (action === 'stop') return `${common}\nStop-Latens\n`;
+    return `${common}\nStop-Latens\nStart-Sleep -Milliseconds 350\nStart-Latens\n`;
   }
 
   async startService() {
     const guardian = path.join(this.stateDir, 'Guardian.ps1');
     if (!this.exists(guardian)) throw new Error('未检测到后台组件。请先使用 alpha5.1 完整包完成一次安装。');
-    try { fs.rmSync(path.join(this.stateDir, 'stop.signal'), { force: true }); } catch (_) {}
     const current = this.getPidStatus(path.join(this.stateDir, 'guardian.pid'));
-    if (!current.alive) this.spawnHiddenPowerShell(guardian);
+    if (!current.alive) await this.runElevatedScript(this.lifecycleScript('start'));
     await new Promise((resolve) => setTimeout(resolve, 900));
     return this.getSnapshot();
   }
 
-  async killPid(pid) {
-    if (!pid || !this.isProcessAlive(pid)) return;
-    try { await execFileAsync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }); } catch (_) {}
-  }
-
   async stopService() {
     if (!this.exists(this.stateDir)) return this.getSnapshot();
-    try { fs.writeFileSync(path.join(this.stateDir, 'stop.signal'), '', 'utf8'); } catch (_) {}
-    const pidFiles = ['guardian.pid', 'bridge.pid', 'gateway.pid'];
-    try { pidFiles.push(...fs.readdirSync(this.stateDir).filter((n) => /^gateway-.*\.pid$/i.test(n))); } catch (_) {}
-    const pids = new Set(pidFiles.map((n) => this.readPid(path.join(this.stateDir, n))).filter(Boolean));
-    for (const pid of pids) await this.killPid(pid);
-    for (const name of pidFiles) { try { fs.rmSync(path.join(this.stateDir, name), { force: true }); } catch (_) {} }
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await this.runElevatedScript(this.lifecycleScript('stop'));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     return this.getSnapshot();
   }
 
   async restartService() {
-    await this.stopService();
-    try { fs.rmSync(path.join(this.stateDir, 'stop.signal'), { force: true }); } catch (_) {}
-    return this.startService();
+    if (!this.exists(path.join(this.stateDir, 'Guardian.ps1'))) throw new Error('未检测到后台组件。');
+    await this.runElevatedScript(this.lifecycleScript('restart'));
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    return this.getSnapshot();
+  }
+
+  configScript(updates) {
+    const pairs = Object.entries(updates).map(([key, value]) => `  '${psQuote(key)}'='${psQuote(value)}'`).join("\n");
+    return `$ErrorActionPreference='Stop'\n$config='${psQuote(this.configPath)}'\nif(-not(Test-Path -LiteralPath $config)){ exit 3 }\n$updates=[ordered]@{\n${pairs}\n}\n$lines=@(Get-Content -LiteralPath $config -Encoding UTF8)\nforeach($key in @($updates.Keys)){\n  $found=$false\n  for($i=0;$i -lt $lines.Count;$i++){\n    if($lines[$i] -match ('^'+[regex]::Escape($key)+'=')){ $lines[$i]=$key+'='+$updates[$key]; $found=$true }\n  }\n  if(-not $found){ $lines += ($key+'='+$updates[$key]) }\n}\n$lines | Set-Content -LiteralPath $config -Encoding UTF8\n`;
   }
 
   async changePassword(password) {
     const value = String(password || '');
     if (!PASSWORD_RE.test(value)) throw new Error('密码必须为 6–64 位，只允许字母、数字及 . _ ~ ! @ # % + = -');
-    this.updateConfig({ AccessPassword: value, Pin: value });
-    await this.restartService();
+    await this.runElevatedScript(`${this.configScript({ AccessPassword: value, Pin: value })}\n${this.lifecycleScript('restart')}`);
+    await new Promise((resolve) => setTimeout(resolve, 900));
     return { ok: true };
   }
 
@@ -315,8 +324,9 @@ class RuntimeService {
     const maxFps = this.validateInteger('最大帧率', settings.maxFps, 15, 120);
     const videoBitRate = this.validateInteger('视频码率', settings.videoBitRate, 500000, 30000000);
     const instanceIndex = this.validateInteger('雷电实例编号', settings.instanceIndex, 0, 99);
-    this.updateConfig({ MaxSize: maxSize, MaxFps: maxFps, VideoBitRate: videoBitRate, InstanceIndex: instanceIndex });
-    await this.restartService();
+    const updates = { MaxSize: maxSize, MaxFps: maxFps, VideoBitRate: videoBitRate, InstanceIndex: instanceIndex };
+    await this.runElevatedScript(`${this.configScript(updates)}\n${this.lifecycleScript('restart')}`);
+    await new Promise((resolve) => setTimeout(resolve, 900));
     return { ok: true, settings: this.getSettings() };
   }
 }
