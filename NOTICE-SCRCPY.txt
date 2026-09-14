@@ -1,0 +1,13 @@
+﻿scrcpy / scrcpy-server
+Upstream: https://github.com/Genymobile/scrcpy
+Version targeted by this package: 4.1
+License: Apache License 2.0
+
+This package does not embed scrcpy-server.
+Setup.ps1 downloads the official scrcpy-server-v4.1 asset directly from:
+https://github.com/Genymobile/scrcpy/releases/download/v4.1/scrcpy-server-v4.1
+
+Expected SHA-256:
+deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae
+
+The setup script refuses to use the downloaded server if the SHA-256 does not match.

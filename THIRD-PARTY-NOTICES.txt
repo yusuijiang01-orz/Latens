@@ -1,0 +1,13 @@
+scrcpy / scrcpy-server 4.1
+Source: https://github.com/Genymobile/scrcpy
+License: Apache License 2.0
+
+Pion WebRTC 4.1.6 and Pion supporting modules
+Source: https://github.com/pion/webrtc
+License: MIT
+
+Gorilla WebSocket 1.5.3
+Source: https://github.com/gorilla/websocket
+License: BSD 2-Clause
+
+The dependency source lock is retained in webrtc-gateway/go.mod and go.sum.
