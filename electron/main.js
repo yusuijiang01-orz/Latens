@@ -1,6 +1,11 @@
 const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, clipboard, dialog } = require('electron');
 const { RuntimeService } = require('./runtime-service');
+
+const execFileAsync = promisify(execFile);
+const LEGACY_TASK = 'LDPlayer-Browser-Remote-v3-AutoStart';
 
 let mainWindow = null;
 let tray = null;
@@ -24,6 +29,21 @@ function showMainWindow() {
   mainWindow.show();
   mainWindow.restore();
   mainWindow.focus();
+}
+
+async function setLegacyTaskAutoStart(enabled) {
+  const flag = enabled ? '/ENABLE' : '/DISABLE';
+  const args = ['/Change', '/TN', LEGACY_TASK, flag];
+  try {
+    await execFileAsync('schtasks.exe', args, { windowsHide: true, timeout: 8000 });
+    return { present: true, elevated: false };
+  } catch (error) {
+    const output = `${error.stdout || ''}\n${error.stderr || ''}\n${error.message || ''}`;
+    if (/cannot find|找不到|不存在/i.test(output)) return { present: false, elevated: false };
+    const command = `Start-Process -FilePath 'schtasks.exe' -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList @('/Change','/TN','${LEGACY_TASK}','${flag}')`;
+    await execFileAsync('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, timeout: 30000 });
+    return { present: true, elevated: true };
+  }
 }
 
 function createWindow() {
@@ -63,7 +83,8 @@ function createTray() {
     { label: '停止远控服务', click: () => runtime.stopService().catch(() => {}) },
     { label: '重启远控服务', click: () => runtime.restartService().catch(() => {}) },
     { type: 'separator' },
-    { label: '退出控制中心（服务继续运行）', click: () => { quitting = true; app.quit(); } }
+    { label: '退出控制中心（服务继续运行）', click: () => { quitting = true; app.quit(); } },
+    { label: '停止服务并退出 Latens', click: async () => { try { await runtime.stopService(); } finally { quitting = true; app.quit(); } } }
   ]));
   tray.on('double-click', showMainWindow);
 }
@@ -79,11 +100,19 @@ function registerIpc() {
   ipcMain.handle('latens:run-diagnostics', () => runtime.runDiagnostics());
   ipcMain.handle('latens:get-settings', () => runtime.getSettings());
   ipcMain.handle('latens:save-settings', (_event, settings) => runtime.saveSettings(settings));
-  ipcMain.handle('latens:set-auto-start', (_event, enabled) => {
+  ipcMain.handle('latens:set-auto-start', async (_event, enabled) => {
     const value = Boolean(enabled);
-    app.setLoginItemSettings({ openAtLogin: value, args: ['--background'] });
-    runtime.setUiSetting('startServiceOnLaunch', value);
-    return { ok: true, enabled: app.getLoginItemSettings().openAtLogin };
+    const previous = app.getLoginItemSettings().openAtLogin;
+    try {
+      app.setLoginItemSettings({ openAtLogin: value, args: ['--background'] });
+      runtime.setUiSetting('startServiceOnLaunch', value);
+      const legacyTask = await setLegacyTaskAutoStart(value);
+      return { ok: true, enabled: app.getLoginItemSettings().openAtLogin, legacyTask };
+    } catch (error) {
+      app.setLoginItemSettings({ openAtLogin: previous, args: ['--background'] });
+      runtime.setUiSetting('startServiceOnLaunch', previous);
+      throw new Error(`修改登录自启失败：${error.message || error}`);
+    }
   });
   ipcMain.handle('latens:copy-text', (_event, text) => { clipboard.writeText(String(text || '')); return { ok: true }; });
   ipcMain.handle('latens:open-external', async (_event, url) => { await shell.openExternal(String(url)); return { ok: true }; });
@@ -107,7 +136,5 @@ app.whenReady().then(async () => {
 });
 
 app.on('activate', () => showMainWindow());
-app.on('window-all-closed', (event) => {
-  if (process.platform !== 'darwin') event.preventDefault?.();
-});
+app.on('window-all-closed', () => {});
 app.on('before-quit', () => { quitting = true; });
