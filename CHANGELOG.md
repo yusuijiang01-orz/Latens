@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.0.0-alpha5.1 - packaging cleanup only
+
+- Removed legacy 01-05 launcher BAT files from the release ZIP to avoid duplicate entry points and Chinese filename encoding issues on Windows extractors.
+- Removed the pre-generated iPhone connection-info text file; Setup.ps1 continues to generate fresh connection information after installation.
+- No network, background-service, authentication, bridge, WebRTC, or UI behavior changed from v3.0.0-alpha5.
+
 ## v3.0.0-alpha5 - multi-network background service + custom password
 
 - Added hidden logon-time Guardian process with child restart supervision.

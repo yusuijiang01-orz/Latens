@@ -2,7 +2,7 @@
 
 Windows 上的雷电模拟器浏览器低延迟远控工具。视频链路使用 scrcpy H.264 + WebRTC，控制链路使用 WebRTC DataChannel + scrcpy Control Protocol。
 
-## v3.0.0-alpha5 主要变化
+## v3.0.0-alpha5.1 主要变化
 
 - 登录 Windows 后通过高权限计划任务**静默后台启动**，不显示 CMD 窗口。
 - 新增 `Guardian.ps1` 常驻守护；桥接或网关异常退出后自动拉起。
@@ -58,7 +58,7 @@ Guardian 会忽略 WSL、Hyper-V、VMware、VirtualBox、Docker 等常见无关�
 
 ## 预编译网关
 
-仓库不提交 `webrtc-gateway.exe`，只保留其 SHA-256。完整可运行 ZIP 包含从用户提供的 alpha4 基线继承的原始网关 EXE。Go 网关源码不在该基线中，因此 alpha5 的多网络能力由 Guardian 的多实例方式实现。
+仓库不提交 `webrtc-gateway.exe`，只保留其 SHA-256。完整可运行 ZIP 包含从用户提供的 alpha4 基线继承的原始网关 EXE。Go 网关源码不在该基线中，因此 alpha5/alpha5.1 的多网络能力由 Guardian 的多实例方式实现。
 
 ## 安全边界
 
