@@ -40,7 +40,7 @@ async function setLegacyTaskAutoStart(enabled) {
   } catch (error) {
     const output = `${error.stdout || ''}\n${error.stderr || ''}\n${error.message || ''}`;
     if (/cannot find|找不到|不存在/i.test(output)) return { present: false, elevated: false };
-    const command = `Start-Process -FilePath 'schtasks.exe' -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList @('/Change','/TN','${LEGACY_TASK}','${flag}')`;
+    const command = `$p=Start-Process -FilePath 'schtasks.exe' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @('/Change','/TN','${LEGACY_TASK}','${flag}'); exit $p.ExitCode`;
     await execFileAsync('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, timeout: 30000 });
     return { present: true, elevated: true };
   }
