@@ -115,20 +115,30 @@ function registerIpc() {
     }
   });
   ipcMain.handle('latens:copy-text', (_event, text) => { clipboard.writeText(String(text || '')); return { ok: true }; });
-  ipcMain.handle('latens:open-external', async (_event, url) => { await shell.openExternal(String(url)); return { ok: true }; });
+  ipcMain.handle('latens:open-external', async (_event, url) => {
+    const target = new URL(String(url));
+    if (!['http:', 'https:'].includes(target.protocol)) throw new Error('只允许打开 HTTP/HTTPS 地址。');
+    await shell.openExternal(target.toString());
+    return { ok: true };
+  });
   ipcMain.handle('latens:show-window', () => { showMainWindow(); return { ok: true }; });
 }
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.latens.remote');
   runtime = new RuntimeService(app);
+
+  const uiSettings = runtime.readUiSettings();
+  const legacyTask = await runtime.getLegacyTaskAutoStart();
+  if (!Object.prototype.hasOwnProperty.call(uiSettings, 'autoStartMigrated') && legacyTask.present) {
+    app.setLoginItemSettings({ openAtLogin: legacyTask.enabled, args: ['--background'] });
+    runtime.setUiSetting('startServiceOnLaunch', legacyTask.enabled);
+    runtime.setUiSetting('autoStartMigrated', true);
+  }
+
   registerIpc();
   createWindow();
   createTray();
-
-  if (process.argv.includes('--background') && runtime.getUiSetting('startServiceOnLaunch', false)) {
-    try { await runtime.startService(); } catch (_) {}
-  }
 
   if (process.platform !== 'win32') {
     dialog.showMessageBox({ type: 'warning', title: 'Latens', message: '当前版本仅支持 Windows。' });
