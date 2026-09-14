@@ -1,0 +1,40 @@
+{
+  "name": "latens-desktop",
+  "productName": "Latens",
+  "version": "3.1.0-beta.1",
+  "description": "Latens 雷电模拟器浏览器远控中文桌面控制中心",
+  "main": "electron/main.js",
+  "author": "yusuijiang01-orz",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "build:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.latens.remote",
+    "productName": "Latens",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "artifactName": "Latens-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Latens"
+    }
+  }
+}
