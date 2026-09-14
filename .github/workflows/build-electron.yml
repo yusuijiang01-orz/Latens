@@ -31,10 +31,24 @@ jobs:
         run: npm run test:syntax
 
       - name: Build Windows installer
+        id: build
+        continue-on-error: true
         shell: pwsh
-        run: npm run build:win
+        run: |
+          npm run build:win *>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Latens-build-log
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload installer
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: Latens-Setup-3.1.0-beta.1
@@ -43,3 +57,8 @@ jobs:
             dist/*.blockmap
           if-no-files-found: error
           retention-days: 14
+
+      - name: Fail if packaging failed
+        if: steps.build.outcome == 'failure'
+        shell: pwsh
+        run: exit 1
