@@ -11,7 +11,7 @@
     "dev": "electron .",
     "test:syntax": "node --check electron/main.js && node --check electron/preload.js && node --check electron/runtime-service.js && node --check renderer/app.js",
     "pack": "electron-builder --dir",
-    "build:win": "electron-builder --win nsis"
+    "build:win": "electron-builder --win nsis --publish never"
   },
   "devDependencies": {
     "electron": "^38.0.0",
